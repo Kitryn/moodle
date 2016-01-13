@@ -35,8 +35,9 @@ def get_weeks_lecture_page(sess, course):  # Updates Course object with list of 
     # Get all weeks
     weeks = soup.find_all("li", attrs={"id": re.compile("section-[0-9]"), "aria-label": re.compile("Week [0-9]")})
     for week in weeks:  # Separates between weeks being in own page, and weeks being on main page
-        tmp = week.find(string="Lectures")  # Attempt to find Lectures in the week
-        if tmp is None:  # Case: Each week is in its own page
+        tmp = week.find_all(string=re.compile("Lecture"))  # Attempt to find Lectures in the week
+        # print(week)
+        if tmp is None:  # Case: Each week is in its own page, OR no lectures exist
             week_page = week.find('a', string=re.compile("Week [0-9]"))["href"]  # Get URL for the week page
             sub_soup = get_soup(sess, week_page)  # Open the week page
             lecture_page_url = sub_soup.find(string=re.compile("Lectures")).find_parent('a')["href"]  # Get Lecture URL
@@ -44,7 +45,12 @@ def get_weeks_lecture_page(sess, course):  # Updates Course object with list of 
 
             course.lecture_pages.append((week_name, lecture_page_url))  # [{"Week 1" : "http..."}, ...]
         else:  # Case: Each week is on the main page
-            lecture_page_url = tmp.find_parent('a')["href"]  # Get Lecture page URL
+            for link in tmp:
+                lecture_page_tag = link.find_parent('a')  # Get Lecture page URL
+                # print(lecture_page_tag)
+                if lecture_page_tag is not None:
+                    break
+            lecture_page_url = lecture_page_tag["href"]
             week_name = " ".join(week["aria-label"].split()[:2])
             course.lecture_pages.append((week_name, lecture_page_url))  # [{"Week 1" : "http..."}, ...]
 
