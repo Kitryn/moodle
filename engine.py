@@ -1,9 +1,9 @@
-from requests import session
 import os
 import click
 from urllib.parse import unquote
 from bs4 import BeautifulSoup
 import re
+import shelve
 
 
 class Course(object):
@@ -67,12 +67,40 @@ def download_file(sess, destination, url):
     return local_filename
 
 
+def get_etag(sess, url):  # Gets an Etag via HTTP HEAD of a given URL
+    r = sess.head(url)
+    return r.headers['Etag']
+
+
 def get_files(sess, destination, url, running=None):  # Downloads all files given a folder page unless it already exists
     soup = get_soup(sess, url)
     to_dl = soup.find_all("a", href=re.compile("forcedownload"))
+    db = shelve.open(os.path.join(os.path.expanduser(destination), '.moodledata'))  # Init shelf for storing etags
+    if db.get('etags', None) is None:
+        db['etags'] = []
+    etag_list = db['etags']
 
     current = 1
     total_num = len(to_dl)
+    for link in to_dl:
+        filename = unquote(link["href"].split('/')[-1].split('?')[0])
+        cur_etag = get_etag(sess, link["href"])
+        if cur_etag in etag_list:
+            click.echo("({}/{}) File already downloaded! Skipping {}".format(current, total_num, filename))
+        else:
+            if os.path.isfile(os.path.join(os.path.expanduser(destination), filename)):
+                click.echo("({}/{}) File already exists! Overwriting {}".format(current, total_num, filename))
+            else:
+                click.echo("({}/{}) Downloading: {}".format(current, total_num, filename))
+            etag_list.append(cur_etag)
+            download_file(sess, destination, link["href"])
+            if running is not None:
+                running += 1
+        current += 1
+    db['etags'] = etag_list
+    db.close()
+
+    '''  Old code
     for link in to_dl:
         filename = unquote(link["href"].split('/')[-1].split('?')[0])
         if os.path.isfile(os.path.join(os.path.expanduser(destination), filename)):
@@ -83,4 +111,7 @@ def get_files(sess, destination, url, running=None):  # Downloads all files give
             if running is not None:
                 running += 1
         current += 1
+    return running
+    '''
+
     return running
